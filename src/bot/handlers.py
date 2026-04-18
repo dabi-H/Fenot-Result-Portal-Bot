@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import concurrent.futures
 from datetime import datetime
 from pathlib import Path
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -85,14 +86,19 @@ async def send_pdf_result(update: Update, context: ContextTypes.DEFAULT_TYPE, st
             "🔄 PDF እየተዘጋጀ ነው... እባክዎ ይጠብቁ።"
         )
         
-        # Generate PDF (async-compatible)
-        pdf_path = generate_result_pdf(student)
+        # Generate PDF in thread pool to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            pdf_path = await loop.run_in_executor(pool, generate_result_pdf, student)
         
         # Delete "generating" message
-        await context.bot.delete_message(
-            chat_id=update.effective_chat.id,
-            message_id=generating_msg.message_id
-        )
+        try:
+            await context.bot.delete_message(
+                chat_id=update.effective_chat.id,
+                message_id=generating_msg.message_id
+            )
+        except Exception as e:
+            logger.warning(f"Could not delete generating message: {e}")
         
         # Send PDF document
         student_id_safe = student["id"].replace("/", "_")
@@ -111,17 +117,28 @@ async def send_pdf_result(update: Update, context: ContextTypes.DEFAULT_TYPE, st
             f"የተዘጋጀበት ቀን: {date_str} {time_str}"
         )
         
+        # Send with increased timeouts
         with open(pdf_path, "rb") as pdf_file:
             await update.message.reply_document(
                 document=pdf_file,
                 filename=filename,
                 caption=caption,
-                parse_mode="Markdown"
+                parse_mode="Markdown",
+                read_timeout=60,      # 60 seconds to read response
+                write_timeout=60,     # 60 seconds to upload
+                connect_timeout=30,   # 30 seconds to connect
+                pool_timeout=30       # 30 seconds for connection pool
             )
         
         # Cleanup: delete PDF after 10 seconds (non-blocking)
         asyncio.create_task(_delayed_delete(pdf_path))
         
+    except TimeoutError as e:
+        logger.error(f"PDF generation/sending timeout: {e}", exc_info=True)
+        await update.message.reply_text(
+            "⏰ ጊዜው አልፏል። ፋይሉ ለመላክ በጣም ቀርፋፋ ነው።\n"
+            "እባክዎ እንደገና ይሞክሩ ወይም ትንሽ ቆይተው ይሞክሩ።"
+        )
     except Exception as e:
         logger.error(f"PDF generation error: {e}", exc_info=True)
         await update.message.reply_text(
@@ -132,7 +149,10 @@ async def send_pdf_result(update: Update, context: ContextTypes.DEFAULT_TYPE, st
 async def _delayed_delete(file_path: str, delay: int = 10) -> None:
     """Helper: delete file after delay (non-blocking)"""
     await asyncio.sleep(delay)
-    delete_pdf(file_path)
+    try:
+        delete_pdf(file_path)
+    except Exception as e:
+        logger.warning(f"Failed to delete PDF {file_path}: {e}")
 
 
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -291,7 +311,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         try:
             if hasattr(context.update, "effective_message") and context.update.effective_message:
                 await context.update.effective_message.reply_text(
-                    "ስህተት ተፈጥሯል። እባክዎ እንደገና ይሞክሩ።"
+                    "申し訳ありませんが、エラーが発生しました。しばらくしてからもう一度お試しください。"
                 )
         except Exception as e:
             logger.error(f"Failed to send error message to user: {e}")
