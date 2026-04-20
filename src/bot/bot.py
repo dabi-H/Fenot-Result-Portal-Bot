@@ -14,6 +14,7 @@ from bot.handlers import (
     handle_text_message,
     handle_callback_query,
     error_handler,
+    health_check,
 )
 
 logger = logging.getLogger(__name__)

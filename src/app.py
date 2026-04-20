@@ -2,11 +2,6 @@ import os
 from dotenv import load_dotenv
 from bot.bot import setup_application
 
-from telegram.ext import CommandHandler
-
-async def health_check(update, context):
-    """Simple health check for Fly.io monitoring"""
-    await update.message.reply_text("🟢 Bot is alive!")
 
 def main():
     load_dotenv()

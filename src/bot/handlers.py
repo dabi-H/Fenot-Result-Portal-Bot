@@ -50,6 +50,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+async def health_check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Simple health check for Fly.io monitoring"""
+    await update.message.reply_text("🟢 Bot is alive!")
+
+
 async def handle_class_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle inline button callback for class selection"""
     query = update.callback_query
