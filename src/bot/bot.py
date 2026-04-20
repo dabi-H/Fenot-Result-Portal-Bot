@@ -41,6 +41,8 @@ def setup_application(token: str) -> Application:
     # Register global error handler (equivalent to bot.catch())
     app.add_error_handler(error_handler)
     
+    app.add_handler(CommandHandler("health", health_check))
+    
     return app
 
 
