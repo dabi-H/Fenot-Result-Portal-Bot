@@ -17,11 +17,24 @@ from pytz import timezone
 from ethiopian_date import EthiopianDateConverter
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(os.path.dirname(BASE_DIR))  # root/
-TEMP_DIR   = os.path.join(PROJECT_DIR, 'src', 'temp')
-FONTS_DIR  = os.path.join(PROJECT_DIR, 'src', 'fonts')
-ASSETS_DIR = os.path.join(PROJECT_DIR, 'src', 'assets')
+
+def find_src_path():
+    curr = BASE_DIR
+    while True:
+        if os.path.basename(curr) == 'src':
+            return curr
+        parent = os.path.dirname(curr)
+        if parent == curr: # Reached root
+            return os.path.join(os.getcwd(), 'src')
+        curr = parent
+
+SRC_DIR = find_src_path()
+TEMP_DIR = os.path.join(SRC_DIR, 'temp')
+FONTS_DIR = os.path.join(SRC_DIR, 'fonts')
+ASSETS_DIR = os.path.join(SRC_DIR, 'assets')
+
 
 REGULAR_FONT = os.path.join(FONTS_DIR, 'NotoSansEthiopic-Regular.ttf')
 BOLD_FONT    = os.path.join(FONTS_DIR, 'NotoSansEthiopic-Bold.ttf')
