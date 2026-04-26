@@ -1,6 +1,9 @@
 import os
 import signal
 import logging
+import threading
+from flask import Flask
+
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -8,6 +11,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
+
 from bot.handlers import (
     start_command,
     help_command,
@@ -17,29 +21,43 @@ from bot.handlers import (
     health_check,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__ )
 
+# ----------------------------------------
+# 🌐 1. Web Server for Kubernetes (NEW)
+# ----------------------------------------
+web_app = Flask(__name__ )
+
+@web_app.route("/")
+def home():
+    return "Bot is running", 200
+
+@web_app.route("/health")
+def health():
+    return "OK", 200
+
+def run_web_server():
+    logger.info("🌐 Starting health server on port 3000...")
+    web_app.run(host="0.0.0.0", port=3000)
+
+
+# ----------------------------------------
+# 🤖 2. Telegram Bot Setup (UNCHANGED)
+# ----------------------------------------
 def setup_application(token: str) -> Application:
     """
     Create and configure the PTB Application instance.
-    Equivalent to: new Telegraf(process.env.BOT_TOKEN)
     """
-    # Build the application with your bot token
     app = Application.builder().token(token).build()
     
-    # Register command handlers: /start and /help
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
-    
-    # Register callback query handler (for inline buttons)
     app.add_handler(CallbackQueryHandler(handle_callback_query))
     
-    # Register text message handler (exclude commands to avoid double-trigger)
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
     )
     
-    # Register global error handler (equivalent to bot.catch())
     app.add_error_handler(error_handler)
     
     app.add_handler(CommandHandler("health", health_check))
@@ -47,33 +65,30 @@ def setup_application(token: str) -> Application:
     return app
 
 
+# ----------------------------------------
+# 🚀 3. Start Bot (UPDATED)
+# ----------------------------------------
 def start_bot() -> Application:
-    """
-    Main entry point to launch the bot.
-    Equivalent to: startBot() in Node.js
-    """
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
         raise ValueError("🔑 TELEGRAM_BOT_TOKEN not found in environment variables")
     
-    # Setup the application
     application = setup_application(token)
-    
-    # Graceful shutdown handler (SIGINT / SIGTERM)
+
+    # ✅ Start web server in background (IMPORTANT FIX)
+    threading.Thread(target=run_web_server, daemon=True).start()
+
+    # Graceful shutdown handler
     def graceful_stop(signum=None, frame=None):
         logger.info("🛑 Stopping bot...")
         application.stop()
         application.shutdown()
-    
-    # Register signal handlers for graceful shutdown
+
     signal.signal(signal.SIGINT, graceful_stop)
     signal.signal(signal.SIGTERM, graceful_stop)
-    
-    # Launch the bot (blocking call, handles async loop internally)
+
     logger.info("🤖 Bot launched successfully!")
-    
-    # run_polling() is blocking and manages the event loop
-    # drop_pending_updates=True clears old updates on restart
+
     application.run_polling(drop_pending_updates=True)
-    
+
     return application
